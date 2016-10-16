@@ -1,19 +1,53 @@
 import scrapy
+import time
 
 class AmazonKickstarter(scrapy.Spider):
     name = "amazon-kickstarter"
+    custom_settings = {
+        'DOWNLOAD_DELAY': 2,
+        "USER_AGENT": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
+    }
     start_urls = [
         'https://www.amazon.com/b?node=13514636011',
     ]
 
     def parse(self, response):
         for card in response.css("li.s-result-item"):
-            yield {
-                'title': card.css("h2.a-size-base::text").extract_first(),
-                'price': card.css("span.a-size-base.a-color-price.s-price::text").extract_first()
-            }
+            link = card.css(".a-link-normal.a-text-normal::attr('href')").extract_first()
+            yield scrapy.Request(link, callback=self.parse_page)
 
-        next_page = response.css('div#pagn a#pagnNextLink::attr("href")').extract_first()
+
+        """next_page = response.css('div#pagn a#pagnNextLink::attr("href")').extract_first()
         if next_page is not None:
             next_page = response.urljoin(next_page)
-            yield scrapy.Request(next_page, callback=self.parse)
+            yield scrapy.Request(next_page, callback=self.parse)"""
+
+    def parse_page(self, response):
+        try:
+            title = response.css("h1#title span::text").extract_first().strip()
+        except:
+            try:
+                title = response.css("#title_feature_div h1::text").extract_first().strip()
+            except:
+                try:
+                    title = response.css("h1#aiv-content-title::text").extract_first().strip()
+                except:
+                    title = response.css(".buying .parseasinTitle #btAsinTitle::text").extract_first().strip()
+
+        try:
+            avgRating = response.css("div#avgRating a span::text").extract_first().strip().split(" ")[0]
+        except:
+            #홈페이지엔 존재하는 경우에도 나타날 수 있음.
+            avgRating = "N/A"
+
+        try:
+            price = response.css("#priceblock_ourpice_row #priceblock_ourpice::text").extract_first()
+        except:
+            print("aa")
+
+        yield {
+            'title': title,
+            'avgRating': avgRating,
+            'url': response.url,
+            'price': price
+        }
